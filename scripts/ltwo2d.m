@@ -1,8 +1,11 @@
 function ltwo2d(image, dest, name, noise, lambda)
-% Remove noise from 1d image using l2 norm.
+% Remove noise from 2d images using l2 norm.
 % image: The original image to have noise added to it
+% dest: Where to store the denoised image
+% name: What to call the denoised image
 % noise: Percentage to be used for gaussian noise adding
 % lambda: The 'cost' for u not being piecewise const
+
 im=imread(image);
 im=im2double(im);
 im = im(:);
@@ -35,9 +38,8 @@ for i = 1:rows-1
 endfor
 
 % Optimize image
-A = I + lambda*Mx'*Mx + lambda*My'My;
-A = inv(A);
-x = A*I_noisy;
+A = I + lambda*Mx'*Mx + lambda*My'*My;
+x = A\I_noisy;
 
 % Change image vector to matrix
 u = vec2mat(x, sqrt(length(x)));
