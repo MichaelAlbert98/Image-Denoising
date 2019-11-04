@@ -38,7 +38,7 @@ for i = 1:rows-1
 endfor
 
 % Optimize image
-[x,a,b,c,d] = SteepestDescent(.75*I_noisy, I_noisy, Mx, My, lambda, @l1optfunction, 5);
+[x,a,b,c,d] = SteepestDescent(.75*I_noisy, I_noisy, Mx, My, lambda, @l1optfunction, 50);
 
 % Change image vector to matrix
 u = vec2mat(x, sqrt(length(x)));

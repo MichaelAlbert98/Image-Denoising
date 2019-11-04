@@ -1,6 +1,6 @@
 function [fval,fgrad] = l1optfunction(xk, f, Mx, My, lambda)
 % Function for image optimization with l1 norm
-% xk: Vector we want to become the original vector
+% xk: Vector we want to become the original image
 % f: Noisy image vector
 % Mx: Cost matrix with respect to x axis
 % My: Cost matrix with respect to y axis
@@ -8,27 +8,10 @@ function [fval,fgrad] = l1optfunction(xk, f, Mx, My, lambda)
 
 x = Mx*xk;
 y = My*xk;
-xgrad = zeros(length(xk),1);
-ygrad = zeros(length(xk),1);
-for i=1:length(xk)
-  if x(i) < 0
-    xgrad(i) = -1;
-  elseif x(i) > 0
-    xgrad(i) = 1;
-  else 
-    xgrad(i) = 0;
-  endif
-
-  if y(i) < 0
-    ygrad(i) = -1;
-  elseif y(i) > 0
-    ygrad(i) = 1;
-  else 
-    ygrad(i) = 0;
-  endif
-endfor
+xgrad = lambda*(Mx'*Mx)*xk;
+ygrad = lambda*(My'*My)*xk;
 
 fval = (.5*norm(xk-f)^2) + (lambda*norm(x,1)) + (lambda*norm(y,1));
-fgrad = xk - f + lambda*xgrad + lambda*ygrad;
+fgrad = xk - f + xgrad + ygrad;
 
 endfunction
