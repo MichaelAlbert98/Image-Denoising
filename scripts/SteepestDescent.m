@@ -12,20 +12,20 @@ pk = -fgrad; %Compute descent direction
 
 for i=1:iterations
     
-    if abs(norm(pk)) > tol %Do line search if pk is above tolerance
-        [xk,armEvals] = Armijo(xk,fcn,pk,c,r,f,Mx,My,lambda);
-        [fval,fgrad] = fcn(xk,f,Mx,My,lambda); %Get updated fval
-        pk = -fgrad;
-        normGrad = norm(fgrad);
-        numEvals = 1 + armEvals + numEvals;
-        fprintf('Number of Iterations = %d \n', i);
-        fprintf('----- \n');
-        fprintf('Function value = %.5f \n', fval);
-        fprintf('Gradient norm = %.5f \n', normGrad);
-        fprintf('Number of Evaluations = %d \n', numEvals);
-        
-        numEvals = 0; %Reset numEvals after each iteration
-    end
+  if abs(norm(pk)) > tol %Do line search if pk is above tolerance
+    [xk,armEvals] = Armijo(xk,fcn,pk,c,r,f,Mx,My,lambda);
+    [fval,fgrad] = fcn(xk,f,Mx,My,lambda); %Get updated fval
+    pk = -fgrad;
+    normGrad = norm(fgrad);
+    numEvals = 1 + armEvals + numEvals;
+    fprintf('Number of Iterations = %d \n', i);
+    fprintf('----- \n');
+    fprintf('Function value = %.5f \n', fval);
+    fprintf('Gradient norm = %.5f \n', normGrad);
+    fprintf('Number of Evaluations = %d \n', numEvals);
+    
+    numEvals = 0; %Reset numEvals after each iteration
+  end
 
 end
 
