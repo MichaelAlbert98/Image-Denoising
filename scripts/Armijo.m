@@ -9,10 +9,10 @@ armEvals = 2; %we always evaluate fk and fgrad at least once
 [fk, fgrad] = fcn(xk,f,Mx,My,lambda);
 fkNew = fcn(xk + alpha.*pk,f,Mx,My,lambda);
 while fkNew > fk + (c*alpha*fgrad'*pk) %continue changing alpha until armijo condition is met
-    fprintf('i = %d', armEvals);
-    alpha = r*alpha;
-    fkNew = fcn(xk + alpha.*pk,f,Mx,My,lambda);
-    armEvals = armEvals + 1;
+  fprintf('i = %d', armEvals);
+  alpha = r*alpha;
+  fkNew = fcn(xk + alpha.*pk,f,Mx,My,lambda);
+  armEvals = armEvals + 1;
 end
 
 xk = xk + alpha.*pk; %update xk
