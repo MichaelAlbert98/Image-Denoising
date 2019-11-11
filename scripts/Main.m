@@ -1,4 +1,4 @@
-function main(image, dest, noise, mu, iter, iterstep)
+function Main(image, dest, noise, mu, iter, iterstep, flags)
   % Remove noise from 2d images. Calculates expected value
   % for on the image with iter points, starting at lambda and going up by iterstep
   % image: The original image to have noise added to it
@@ -7,13 +7,14 @@ function main(image, dest, noise, mu, iter, iterstep)
   % mu: The 'cost' for u not being piecewise const
   % iter: How many expected value points to plot
   % iterstep: How much to increase lambda by each iteration
+  % flags: 0 for L2, 1 for Split Bregman
 
   tol = 5*10^-3;
-  lambda = 2*mu;
   im=imread(image);
   im=im2double(im);
   im = im(:);
-  rows = size(im,1);
+  matsize = sqrt(length(im));
+  rows = length(im);
   I = speye(rows);
   xaxis = mu + (0:iter-1)*iterstep;
 
@@ -21,61 +22,66 @@ function main(image, dest, noise, mu, iter, iterstep)
   imnoise = addnoise(noise, im);
 
   % Create x 'cost' matrix for optimization
-  Mx = sparse(rows,rows);
-  for i = 1:rows-256
-    Mx(i,i) = -1;
-    Mx(i,i+256) = 1;
-  endfor
+  dia1 = ones(rows,1);
+  dia1(rows+1:rows+matsize,1) = 0;
+  dia2 = ones(rows+matsize,1);
+  Mx = spdiags([-1*dia1 dia2],[0 matsize+1],rows,rows);
 
   % Create y 'cost' matrix for optimization
-  My = sparse(rows,rows);
-  for i = 1:rows-1
-    if (mod(i,256) == 0)
-      My(i,i) = 0;
-      My(i,i+1) = 0;
-    else 
-      My(i,i) = -1;
-      My(i,i+1) = 1;
-    endif
+  dia1 = ones(rows,1);
+  dia1(rows+1,1) = 0;
+  dia2 = ones(rows+1,1);
+  My = spdiags([-1*dia1 dia2],[0 matsize+1],rows,rows);
+  for i=1:matsize-1
+    x = i*matsize;
+    My(x,x) = 0;
+    My(x,x+1) = 0;
   endfor
   
   % Test different lambda 
   for i=1:iter
     
-##    % L2 Optimization
-##    A = I + lambda*Mx'*Mx + lambda*My'*My;
-##    uk = A\imnoise;
+    % L2 Optimization
+    if flags == 0
+      A = I + lambda*Mx'*Mx + lambda*My'*My;
+      uk = A\imnoise;
+    endif
       
     % Split Bregman Optimization
-    uk = imnoise;
-    [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
-    while norm(uk-ukprev,2)/norm(uk,2) > tol
-      norm(uk-ukprev,2)/norm(uk,2)
-      temp = uk;
-      uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
-      printf("Gaus\n");
-      ukprev = temp;
-      gradx = Mx*uk;
-      grady = My*uk;
-      dxk = shrink(gradx + bxk, 1/lambda);
-      printf("Shrink1\n");
-      dyk = shrink(grady + byk, 1/lambda);
-      printf("Shrink2\n");
-      bxk = bxk + gradx - dxk;
-      printf("bkx\n");
-      byk = byk + grady - dyk;
-      printf("bky\n");
-    endwhile
+    if flags == 1
+      uk = imnoise;
+      lambda = 2*mu;
+      [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
+      while norm(uk-ukprev,2)/norm(uk,2) > tol
+        prev = uk;
+        uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
+        ##printf("Gaus\n");
+        ukprev = prev;
+        gradx = (1/256)*Mx*uk;
+        grady = (1/256)*My*uk;
+        dxk = shrink(gradx + bxk, 1/lambda);
+        ##printf("Shrink1\n");
+        dyk = shrink(grady + byk, 1/lambda);
+        ##printf("Shrink2\n");
+        bxk = bxk + gradx - dxk;
+        ##printf("bkx\n");
+        byk = byk + grady - dyk;
+        ##printf("bky\n");
+      endwhile
+    endif
+    
+##    hold on;
+##    plot(uk);
+##    plot(im);
+##    legend('Calc Opt','Orig');
 
     % Change image vector to matrix
-    expected = vec2mat(uk, sqrt(length(uk)));
-    expected = expected';
-      
+    expected = vec2mat(uk, sqrt(length(uk)))';
    % Export image
     if ~exist(dest, 'dir')
       mkdir(dest);
     endif
-    fullName = fullfile(dest, [num2str(lambda, '%.3f') '.tif']); 
+    fullName = fullfile(dest, [num2str(mu, '%.3f') '.tif']); 
     expected = mat2gray(expected);
     imwrite(expected, fullName);
     
@@ -83,63 +89,63 @@ function main(image, dest, noise, mu, iter, iterstep)
     expval(i) = norm(expected(:)-im,2)/norm(im,2);
     
     % Increment lambda
-    lambda = lambda + iterstep;
+    mu = mu + iterstep;
   endfor
   
   % Create and export graph
   plot(xaxis, expval);
-  saveas(gcf, [pwd '\' dest '\plot.png']);
+  saveas(gcf, [dest '\plot.png']);
   
   
   function ret = shrink(x, gam)
-    for i=1:length(x)
-      if (x(i) == 0)
-        ret(i) = 0;
-      else
-        ret(i) = x(i)/abs(x(i)) * max(abs(x(i))-gam,0);
-      endif
-    endfor
-    ret = ret';
+    % Vectorization
+    n = length(x);
+    ret(1:n,1) = (x(1:n,1)./abs(x(1:n,1))).*max(abs(x(1:n,1))-gam,0);
+    ret(isnan(ret)) = 0; 
+    
+##    Linear for loop
+##    for i=1:length(x)
+##      if (x(i) == 0)
+##        ret(i) = 0;
+##      else
+##        ret(i) = x(i)/abs(x(i)) * max(abs(x(i))-gam,0);
+##      endif
+##    endfor
+##    ret = ret';
   endfunction
   
   function ret = gauseidel(uk, dxk, dyk, bxk, byk, noisyim, lambda, mu)
     a = length(uk);
     sa = sqrt(a);
-    for i = 1:a
-      if (i <= sa)
-        ukup = 0;
-        dxkup = 0;
-        bxkup = 0;
-      else
-        ukup = uk(i-sa);
-        dxkup = dxk(i-sa);
-        bxkup = bxk(i-sa);
-      endif
-      
-      if (i > a-sa)
-        ukdown = 0;
-      else 
-        ukdown = uk(i+sa);
-      endif
-      
-      if (mod(i,sa) == 1)
-        ukleft = 0;
-        dykleft = 0;
-        bykleft = 0;
-      else
-        ukleft = uk(i-1);
-        dykleft = dyk(i-1);
-        bykleft = byk(i-1);
-      endif
-      
-      if (mod(i,sa) == 0)
-       ukright = 0;
-      else
-       ukright = uk(i+1);
-      endif
-      ret(i) = (lambda/(mu+(4*lambda)))*(ukup+ukdown+ukright+ukleft+dxkup-dxk(i)+dykleft-dyk(i)-bxkup+bxk(i)-bykleft+byk(i))+(mu/(mu+4*lambda))*noisyim(i);
-    endfor
-    ret = ret';
+    uk = vec2mat(uk, sa)';
+    dxk = vec2mat(dxk, sa)';
+    dyk = vec2mat(dyk, sa)';
+    bxk = vec2mat(bxk, sa)';
+    byk = vec2mat(byk, sa)';
+    noisyim = vec2mat(noisyim, sa)';
+    
+    temp(2:sa-1,2:sa-1) = uk(3:sa,2:sa-1)+uk(1:sa-2,2:sa-1)+uk(2:sa-1,3:sa)+uk(2:sa-1,1:sa-2)...
+      +dxk(1:sa-2,2:sa-1)-dxk(2:sa-1,2:sa-1)+dyk(2:sa-1,1:sa-2)-dyk(2:sa-1,2:sa-1)...
+      -bxk(1:sa-2,2:sa-1)+bxk(2:sa-1,2:sa-1)-byk(2:sa-1,1:sa-2)+byk(2:sa-1,2:sa-1);
+    temp(1,2:sa-1) = uk(2,2:sa-1)+uk(1,3:sa)+uk(1,1:sa-2)...
+      -dxk(1,2:sa-1)+dyk(1,1:sa-2)-dyk(1,2:sa-1)...
+      +bxk(1,2:sa-1)-byk(1,1:sa-2)+byk(1,2:sa-1);
+    temp(sa,2:sa-1) = uk(sa-1,2:sa-1)+uk(sa,3:sa)+uk(sa,1:sa-2)...
+      +dxk(sa-1,2:sa-1)-dxk(sa,2:sa-1)+dyk(sa,1:sa-2)-dyk(sa,2:sa-1)...
+      -bxk(sa-1,2:sa-1)+bxk(sa,2:sa-1)-byk(sa,1:sa-2)+byk(sa,2:sa-1);
+    temp(2:sa-1,1) = uk(3:sa,1)+uk(1:sa-2,1)+uk(2:sa-1,2)...
+      +dxk(1:sa-2,1)-dxk(2:sa-1,1)-dyk(2:sa-1,1)...
+      -bxk(1:sa-2,1)+bxk(2:sa-1,1)+byk(2:sa-1,1);
+    temp(2:sa-1,sa) = uk(3:sa,sa)+uk(1:sa-2,sa)+uk(2:sa-1,sa-1)...
+      +dxk(1:sa-2,sa)-dxk(2:sa-1,sa)+dyk(2:sa-1,sa-1)-dyk(2:sa-1,sa)...
+      -bxk(1:sa-2,sa)+bxk(2:sa-1,sa)-byk(2:sa-1,sa-1)+byk(2:sa-1,sa);
+    temp(1,1) = uk(2,1)+uk(1,2)-dxk(1,1)-dyk(1,1)+bxk(1,1)+byk(1,1);
+    temp(1,sa) = uk(2,sa)+uk(1,sa-1)-dxk(1,sa)+dyk(1,sa-1)-dyk(1,sa)+bxk(1,sa)-byk(1,sa-1)+byk(1,sa);
+    temp(sa,1) = uk(sa-1,1)+uk(sa,2)+dxk(sa-1,1)-dxk(sa,1)-dyk(sa,1)-bxk(sa-1,1)+bxk(sa,1)+byk(sa,1);
+    temp(sa,sa) = uk(sa-1,sa)+uk(sa,sa-1)+dxk(sa-1,sa)-dxk(sa,sa)+dyk(sa,sa-1)-dyk(sa,sa)-bxk(sa-1,sa)...
+      +bxk(sa-1,sa)-byk(sa,sa-1)+byk(sa,sa);
+    ret = (lambda/(mu+(4*lambda)))*temp + (mu/(mu+4*lambda))*noisyim;
+    ret = ret(:);
   endfunction
   
 endfunction
