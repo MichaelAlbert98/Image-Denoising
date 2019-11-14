@@ -1,4 +1,4 @@
-function Main(image, dest, noise, mu, iter, iterstep, flags)
+function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
   % Remove noise from 2d images. Calculates expected value
   % for on the image with iter points, starting at lambda and going up by iterstep
   % image: The original image to have noise added to it
@@ -17,6 +17,7 @@ function Main(image, dest, noise, mu, iter, iterstep, flags)
   rows = length(im);
   I = speye(rows);
   xaxis = mu + (0:iter-1)*iterstep;
+  yaxis = mu + (0:iter-1)*iterstep;
 
   % Add noise 
   imnoise = addnoise(noise, im);
@@ -36,82 +37,100 @@ function Main(image, dest, noise, mu, iter, iterstep, flags)
     x = i*matsize;
     My(x,x) = 0;
     My(x,x+1) = 0;
-  endfor
+  endfor 
   
-  % Test different lambda 
-  for i=1:iter
-    
-    % L2 Optimization
-    if flags == 0
-      A = I + lambda*Mx'*Mx + lambda*My'*My;
+  % L2 Optimization
+  if flags == 0
+    % Test different mu
+    for i=1:iter
+      A = I + mu*Mx'*Mx + mu*My'*My;
       uk = A\imnoise;
-    endif
-      
-    % Split Bregman Optimization
-    if flags == 1
-      uk = imnoise;
-      lambda = 2*mu;
-      [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
-      while norm(uk-ukprev,2)/norm(uk,2) > tol
-        prev = uk;
-        uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
-        ##printf("Gaus\n");
-        ukprev = prev;
-        gradx = (1/256)*Mx*uk;
-        grady = (1/256)*My*uk;
-        dxk = shrink(gradx + bxk, 1/lambda);
-        ##printf("Shrink1\n");
-        dyk = shrink(grady + byk, 1/lambda);
-        ##printf("Shrink2\n");
-        bxk = bxk + gradx - dxk;
-        ##printf("bkx\n");
-        byk = byk + grady - dyk;
-        ##printf("bky\n");
-      endwhile
-    endif
+      exportimL2(uk,dest,mu);
+      mu = mu + iterstep;
+      relerr(i) = norm(uk-im,2)/norm(im,2);
+    endfor
+    graph2d(xaxis,relerr,dest);
+  endif
     
-##    hold on;
-##    plot(uk);
-##    plot(im);
-##    legend('Calc Opt','Orig');
+  % Split Bregman Optimization
+  if flags == 1
+    startval = mu;
+    % Test different mu
+    for i=1:iter
+      lambda = startval;
+      % Test different lambda
+      for j=1:iter
+        uk = imnoise;
+        [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
+        
+        while norm(uk-ukprev,2)/norm(uk,2) > tol
+          prev = uk;
+          uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
+          ukprev = prev;
+          gradx = (1/256)*Mx*uk;
+          grady = (1/256)*My*uk;
+          dxk = shrink(gradx + bxk, 1/lambda);
+          dyk = shrink(grady + byk, 1/lambda);
+          bxk = bxk + gradx - dxk;
+          byk = byk + grady - dyk;
+        endwhile
+        relerr(i,j) = norm(uk-im,2)/norm(im,2);
+        exportimbreg(uk, dest, mu, lambda);
+        lambda = lambda + iterstep;
+      endfor
+      mu = mu + iterstep;
+    endfor
+    graphheat(relerr, dest);
+  endif
 
+    
+    
+  function exportimL2(imvec,dest,mu)  
     % Change image vector to matrix
-    expected = vec2mat(uk, sqrt(length(uk)))';
-   % Export image
+    expected = vec2mat(imvec, sqrt(length(imvec)))';
+    % Export image
     if ~exist(dest, 'dir')
       mkdir(dest);
     endif
     fullName = fullfile(dest, [num2str(mu, '%.3f') '.tif']); 
     expected = mat2gray(expected);
     imwrite(expected, fullName);
-    
-    % Add graph point
-    expval(i) = norm(expected(:)-im,2)/norm(im,2);
-    
-    % Increment lambda
-    mu = mu + iterstep;
-  endfor
+  endfunction    
   
-  % Create and export graph
-  plot(xaxis, expval);
-  saveas(gcf, [dest '\plot.png']);
+  function graph2d(x,y,dest)
+    plot(x, y);
+    saveas(gcf, [dest '\plot.png']);
+  endfunction
   
+  function exportimbreg(imvec,dest,mu,lambda)
+    % Change image vector to matrix
+    expected = vec2mat(imvec, sqrt(length(imvec)))';
+    % Export image
+    if ~exist(dest, 'dir')
+      mkdir(dest);
+    endif
+    fullName = fullfile(dest, ['mu' num2str(mu, '%.3f') 'lam' num2str(lambda, '%.3f') '.tif']); 
+    expected = mat2gray(expected);
+    imwrite(expected, fullName);
+  endfunction
+  
+  function graphheat(matrix,dest)
+    colormap('hot');
+    imagesc(flipud(matrix));
+    set(gca,'YDir','normal');
+    colorbar
+    title('relative error');
+    xlabel('lambda');
+    ylabel('mu');
+    saveas(gcf, [dest '\plot.png']);
+    imagesc(matrix);
+  endfunction
   
   function ret = shrink(x, gam)
     % Vectorization
     n = length(x);
     ret(1:n,1) = (x(1:n,1)./abs(x(1:n,1))).*max(abs(x(1:n,1))-gam,0);
     ret(isnan(ret)) = 0; 
-    
-##    Linear for loop
-##    for i=1:length(x)
-##      if (x(i) == 0)
-##        ret(i) = 0;
-##      else
-##        ret(i) = x(i)/abs(x(i)) * max(abs(x(i))-gam,0);
-##      endif
-##    endfor
-##    ret = ret';
   endfunction
   
   function ret = gauseidel(uk, dxk, dyk, bxk, byk, noisyim, lambda, mu)
