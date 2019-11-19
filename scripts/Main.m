@@ -53,7 +53,7 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
   endif
     
   % Split Bregman Optimization
-  if flags == 1
+  if flags == 1 || flags == 2
     startval = mu;
     % Test different mu
     for i=1:iter
@@ -61,26 +61,38 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
       % Test different lambda
       for j=1:iter
         uk = imnoise;
+        loops = 0;
         [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
         
         while norm(uk-ukprev,2)/norm(uk,2) > tol
+          loops = loops + 1;
           prev = uk;
           uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
           ukprev = prev;
           gradx = (1/256)*Mx*uk;
           grady = (1/256)*My*uk;
-          dxk = shrink(gradx + bxk, 1/lambda);
-          dyk = shrink(grady + byk, 1/lambda);
+          % Anisotropic
+          if flags == 1
+            dxk = shrink(gradx + bxk, 1/lambda);
+            dyk = shrink(grady + byk, 1/lambda);
+          % Isotropic
+          else
+            sk = sqrt(abs(gradx+bxk).^2+abs(grady+byk).^2);
+            dxk = max(sk - 1/lambda,0).*((gradx+bxk)./sk);
+            dyk = max(sk - 1/lambda,0).*((grady+byk)./sk);
+          endif
           bxk = bxk + gradx - dxk;
           byk = byk + grady - dyk;
         endwhile
         relerr(i,j) = norm(uk-im,2)/norm(im,2);
+        totaliters(i,j) = loops;
         exportimbreg(uk, dest, mu, lambda);
         lambda = lambda + iterstep;
       endfor
       mu = mu + iterstep;
     endfor
-    graphheat(relerr, dest);
+    graphheat(xaxis, yaxis, relerr, 'relative error', [dest '/relerr.png']);
+    graphheat(xaxis, yaxis, totaliters, 'total iterations', [dest '/totaliters.png']);
   endif
 
     
@@ -114,22 +126,22 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
     imwrite(expected, fullName);
   endfunction
   
-  function graphheat(matrix,dest)
+  function graphheat(x,y,vals,name,dest)
+    imagesc(x,y,vals);
     colormap('hot');
-    imagesc(flipud(matrix));
-    set(gca,'YDir','normal');
     colorbar
-    title('relative error');
     xlabel('lambda');
     ylabel('mu');
-    saveas(gcf, [dest '\plot.png']);
-    imagesc(matrix);
+    title(name);
+    set(gca,'YDir','normal');
+    saveas(gcf, dest);
   endfunction
   
   function ret = shrink(x, gam)
     % Vectorization
     n = length(x);
-    ret(1:n,1) = (x(1:n,1)./abs(x(1:n,1))).*max(abs(x(1:n,1))-gam,0);
+    ret = (x./abs(x)).*max(abs(x)-gam,0);
+    %ret(1:n,1) = (x(1:n,1)./abs(x(1:n,1))).*max(abs(x(1:n,1))-gam,0);
     ret(isnan(ret)) = 0; 
   endfunction
   
