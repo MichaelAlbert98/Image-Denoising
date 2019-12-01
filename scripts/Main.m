@@ -1,27 +1,34 @@
-function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
+function relerr = Main(orig, noisy, dest, mu, iter, iterstep, flags)
   % Remove noise from 2d images. Calculates expected value
-  % for on the image with iter points, starting at lambda and going up by iterstep
-  % image: The original image to have noise added to it
+  % for the noisy with iter points, starting at lambda and going up by iterstep
+  % orig: The original image
+  % noisy: The noisy image
   % dest: Where to store the denoised image
-  % noise: Percentage to be used for gaussian noise adding
   % mu: The 'cost' for u not being piecewise const
   % iter: How many expected value points to plot
   % iterstep: How much to increase lambda by each iteration
   % flags: 0 for L2, 1 for Split Bregman
 
   tol = 5*10^-3;
-  im=imread(image);
-  im=im2double(im);
-  im = im(:);
-  matsize = sqrt(length(im));
-  rows = length(im);
+  matsize = sqrt(length(noisy));
+  rows = length(noisy);
   I = speye(rows);
   xaxis = mu + (0:iter-1)*iterstep;
   yaxis = mu + (0:iter-1)*iterstep;
 
-  % Add noise 
-  imnoise = addnoise(noise, im);
-
+  % Create destination
+  if ~exist(dest, 'dir')
+    mkdir(dest);
+  endif
+  if ~exist([dest '/images'])
+    mkdir([dest '/images']);
+  endif
+  if ~exist([dest '/matrices'])
+    mkdir([dest '/matrices']);
+  endif
+  csvwrite([dest '/noisy.txt'], vec2mat(noisy, matsize));
+  imwrite(vec2mat(noisy, matsize)', [dest '/noisy.tif']);
+    
   % Create x 'cost' matrix for optimization
   dia1 = ones(rows,1);
   dia1(rows+1:rows+matsize,1) = 0;
@@ -44,12 +51,13 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
     % Test different mu
     for i=1:iter
       A = I + mu*Mx'*Mx + mu*My'*My;
-      uk = A\imnoise;
+      uk = A\noisy;
       exportimL2(uk,dest,mu);
+      csvwrite([dest '/matrices/' num2str(mu, '%.3f') '.txt'], vec2mat(uk, matsize)); 
       mu = mu + iterstep;
-      relerr(i) = norm(uk-im,2)/norm(im,2);
+      relerr(i) = norm(uk-orig,2)/norm(orig,2);
     endfor
-    graph2d(xaxis,relerr,dest);
+    graph2d(xaxis,relerr,[dest '/L2plot.png']);
   endif
     
   % Split Bregman Optimization
@@ -60,14 +68,14 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
       lambda = startval;
       % Test different lambda
       for j=1:iter
-        uk = imnoise;
+        uk = noisy;
         loops = 0;
         [ukprev, dxk, dyk, bxk, byk] = deal(zeros(length(uk),1));
         
         while norm(uk-ukprev,2)/norm(uk,2) > tol
           loops = loops + 1;
           prev = uk;
-          uk = gauseidel(uk, dxk, dyk, bxk, byk, imnoise, lambda, mu);
+          uk = gauseidel(uk, dxk, dyk, bxk, byk, noisy, lambda, mu);
           ukprev = prev;
           gradx = (1/256)*Mx*uk;
           grady = (1/256)*My*uk;
@@ -84,44 +92,44 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
           bxk = bxk + gradx - dxk;
           byk = byk + grady - dyk;
         endwhile
-        relerr(i,j) = norm(uk-im,2)/norm(im,2);
+        relerr(i,j) = norm(uk-orig,2)/norm(orig,2);
         totaliters(i,j) = loops;
         exportimbreg(uk, dest, mu, lambda);
+        csvwrite([dest '/matrices/mu' num2str(mu, '%.3f') 'lam' num2str(lambda, '%.3f') '.txt'], vec2mat(uk, matsize)); 
         lambda = lambda + iterstep;
       endfor
       mu = mu + iterstep;
     endfor
     graphheat(xaxis, yaxis, relerr, 'relative error', [dest '/relerr.png']);
     graphheat(xaxis, yaxis, totaliters, 'total iterations', [dest '/totaliters.png']);
+    [~,mincolumn] = find(relerr==min(min(relerr)));
+    graph2d(yaxis, relerr(:,mincolumn),[dest '/Bregplot.png']);
   endif
 
     
     
   function exportimL2(imvec,dest,mu)  
-    % Change image vector to matrix
+    % Change noisy vector to matrix
     expected = vec2mat(imvec, sqrt(length(imvec)))';
-    % Export image
-    if ~exist(dest, 'dir')
-      mkdir(dest);
-    endif
-    fullName = fullfile(dest, [num2str(mu, '%.3f') '.tif']); 
+    % Export noisy
+    fullName = fullfile(dest, ['/images/' num2str(mu, '%.3f') '.tif']); 
     expected = mat2gray(expected);
     imwrite(expected, fullName);
   endfunction    
   
   function graph2d(x,y,dest)
     plot(x, y);
-    saveas(gcf, [dest '\plot.png']);
+    saveas(gcf, dest);
   endfunction
   
   function exportimbreg(imvec,dest,mu,lambda)
-    % Change image vector to matrix
+    % Change noisy vector to matrix
     expected = vec2mat(imvec, sqrt(length(imvec)))';
-    % Export image
+    % Export noisy
     if ~exist(dest, 'dir')
       mkdir(dest);
     endif
-    fullName = fullfile(dest, ['mu' num2str(mu, '%.3f') 'lam' num2str(lambda, '%.3f') '.tif']); 
+    fullName = fullfile(dest, ['/images/mu' num2str(mu, '%.3f') 'lam' num2str(lambda, '%.3f') '.tif']); 
     expected = mat2gray(expected);
     imwrite(expected, fullName);
   endfunction
@@ -141,7 +149,6 @@ function relerr = Main(image, dest, noise, mu, iter, iterstep, flags)
     % Vectorization
     n = length(x);
     ret = (x./abs(x)).*max(abs(x)-gam,0);
-    %ret(1:n,1) = (x(1:n,1)./abs(x(1:n,1))).*max(abs(x(1:n,1))-gam,0);
     ret(isnan(ret)) = 0; 
   endfunction
   
