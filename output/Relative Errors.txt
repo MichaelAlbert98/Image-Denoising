@@ -1,0 +1,34 @@
+.05 Gaussian Noise:
+L2: 0.088475
+Bregman: 0.077652
+Improvement: 13.94%
+
+.25 Gaussian Noise:
+L2: 0.15200
+Bregman: 0.12335
+Improvement: 23.23%
+
+.50 Gaussian Noise:
+L2: 0.18526
+Bregman: 0.14501
+Improvement: 27.76%
+
+.05 Salt & Pepper Noise:
+L2: 0.15814
+Bregman: 0.12964
+Improvement: 21.98%
+
+.15 Salt & Pepper Noise:
+L2: 0.22410
+Bregman: 0.16946
+Improvement: 24.38%
+
+.25 Salt & Pepper Noise:
+L2: 0.26989
+Bregman: 0.21921
+Improvement: 18.78%
+
+Distance Noise:
+L2: 0.40546
+Bregman: 0.39216
+Improvement: 3.39%
