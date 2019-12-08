@@ -103,7 +103,7 @@ function relerr = Main(orig, noisy, dest, mu, iter, iterstep, flags)
     graphheat(xaxis, yaxis, relerr, 'relative error', [dest '/relerr.png']);
     graphheat(xaxis, yaxis, totaliters, 'total iterations', [dest '/totaliters.png']);
     [~,mincolumn] = find(relerr==min(min(relerr)));
-    graph2d(yaxis, relerr(:,mincolumn),[dest '/Bregplot.png']);
+    graph2d(yaxis, relerr(:,mincolumn(length(mincolumn))),[dest '/Bregplot.png']);
   endif
 
     
